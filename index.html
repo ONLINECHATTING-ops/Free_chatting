@@ -3,51 +3,135 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Lite — Login</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Lite — Login / Signup</title>
+  <style>
+    :root{--bg:#f3f6f9;--card:#fff;--muted:#6b7280;--accent:#2563eb}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Arial}
+    body{margin:0;background:var(--bg);color:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh}
+    .card{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.08);width:100%;max-width:380px}
+    h2{margin:0 0 16px;font-weight:700;text-align:center}
+    .form-row{margin-bottom:12px;display:flex;flex-direction:column}
+    label{font-size:13px;color:var(--muted);margin-bottom:6px}
+    input{padding:10px;border-radius:8px;border:1px solid #e6eef7}
+    button{padding:10px;border:none;border-radius:8px;cursor:pointer}
+    .primary{background:var(--accent);color:#fff;font-weight:600}
+    .secondary{background:transparent;border:1px solid #e6eef7}
+    .muted{text-align:center;color:var(--muted);font-size:14px;margin-top:8px}
+    .toggle{text-align:center;margin-top:14px;font-size:14px}
+    .toggle a{color:var(--accent);cursor:pointer;text-decoration:none;font-weight:600}
+  </style>
 </head>
 <body>
-  <div class="center-card card">
-    <h2 class="brand">Lite</h2>
+  <div class="card">
+    <h2 id="formTitle">Login</h2>
+
+    <div id="nameRow" class="form-row" style="display:none;">
+      <label>Full name</label>
+      <input id="name" placeholder="Your full name" />
+    </div>
+
     <div class="form-row">
       <label>Email</label>
-      <input id="email" placeholder="you@example.com" />
+      <input id="email" type="email" placeholder="you@example.com" />
     </div>
+
     <div class="form-row">
       <label>Password</label>
       <input id="password" type="password" placeholder="••••••••" />
     </div>
-    <div class="form-row row">
-      <button id="login" class="primary">Login</button>
-      <button id="signup" class="secondary">Sign up</button>
+
+    <div class="form-row">
+      <button id="submitBtn" class="primary">Login</button>
     </div>
+
     <div id="msg" class="muted"></div>
+    <div class="toggle">
+      <span id="toggleText">Don’t have an account? <a id="toggleLink">Sign up</a></span>
+    </div>
   </div>
 
+  <!-- Firebase libs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
-  <script src="app.js"></script>
+
   <script>
-    authOnLoad(u=>{ if(u) redirect('home.html'); });
-    document.getElementById('login').onclick = async ()=>{
-      const email = document.getElementById('email').value.trim();
-      const pwd = document.getElementById('password').value;
-      const m = document.getElementById('msg'); m.textContent='Signing in...';
-      try{ await signInEmail(email,pwd); redirect('home.html'); }catch(e){ m.textContent=e.message; }
+    // 🔹 तिम्रो Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBXCMjlg84qvF1xlaHaWVQeJyY0MmsCWxI",
+      authDomain: "chatting-f6825.firebaseapp.com",
+      databaseURL: "https://chatting-f6825-default-rtdb.firebaseio.com",
+      projectId: "chatting-f6825",
+      storageBucket: "chatting-f6825.firebasestorage.app",
+      messagingSenderId: "668245496547",
+      appId: "1:668245496547:web:990edf7bd72e32e87e6bd6"
     };
-    document.getElementById('signup').onclick = async ()=>{
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    // 🔹 toggle between login/signup
+    let isSignup = false;
+    const formTitle = document.getElementById('formTitle');
+    const nameRow = document.getElementById('nameRow');
+    const submitBtn = document.getElementById('submitBtn');
+    const toggleLink = document.getElementById('toggleLink');
+    const msg = document.getElementById('msg');
+
+    toggleLink.addEventListener('click', () => {
+      isSignup = !isSignup;
+      if (isSignup) {
+        formTitle.textContent = "Sign up";
+        nameRow.style.display = "flex";
+        submitBtn.textContent = "Sign up";
+        toggleLink.textContent = "Login";
+        document.getElementById('toggleText').firstChild.textContent = "Already have an account? ";
+      } else {
+        formTitle.textContent = "Login";
+        nameRow.style.display = "none";
+        submitBtn.textContent = "Login";
+        toggleLink.textContent = "Sign up";
+        document.getElementById('toggleText').firstChild.textContent = "Don’t have an account? ";
+      }
+      msg.textContent = "";
+    });
+
+    // 🔹 handle form submit
+    submitBtn.addEventListener('click', async () => {
+      const name = document.getElementById('name').value.trim();
       const email = document.getElementById('email').value.trim();
-      const pwd = document.getElementById('password').value;
-      const m = document.getElementById('msg'); m.textContent='Creating account...';
-      try{
-        const u = await signUpEmail(email,pwd);
-        await setDb(`/users/${u.uid}`, { uid:u.uid, email, name: email.split('@')[0], avatar:'', createdAt:Date.now() });
-        m.textContent='Account created! Redirecting...';
-        redirect('home.html');
-      }catch(e){ m.textContent=e.message; }
-    };
+      const password = document.getElementById('password').value;
+
+      msg.textContent = "";
+      if (!email || !password || (isSignup && !name)) {
+        msg.textContent = "Fill all required fields";
+        return;
+      }
+
+      try {
+        if (isSignup) {
+          msg.textContent = "Creating account...";
+          const cred = await auth.createUserWithEmailAndPassword(email, password);
+          await firebase.database().ref('/users/' + cred.user.uid).set({
+            name: name,
+            email: email,
+            createdAt: Date.now()
+          });
+          msg.textContent = "Account created! Redirecting...";
+        } else {
+          msg.textContent = "Signing in...";
+          await auth.signInWithEmailAndPassword(email, password);
+          msg.textContent = "Login successful! Redirecting...";
+        }
+        setTimeout(() => { window.location.href = "home.html"; }, 1000);
+      } catch (err) {
+        msg.textContent = err.message;
+      }
+    });
+
+    // auto redirect if already logged in
+    auth.onAuthStateChanged(user => {
+      if (user) window.location.href = "home.html";
+    });
   </script>
 </body>
 </html>

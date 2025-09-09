@@ -1,0 +1,74 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lite — Chat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap container">
+      <button class="link" onclick="redirect('messages.html')">← Messages</button>
+      <strong id="chatTitle" class="brand">Chat</strong>
+      <span></span>
+    </div>
+  </div>
+
+  <div id="msgList" class="container msglist"></div>
+
+  <div class="container composer">
+    <input id="msgInput" placeholder="Write a message..." />
+    <input id="fileInput" type="file" accept="image/*" capture="environment" style="display:none" />
+    <button class="secondary" onclick="document.getElementById('fileInput').click()">📷</button>
+    <button id="sendBtn" class="primary">Send</button>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+<script src="app.js"></script><script>
+    const params = new URLSearchParams(location.search);
+    const chatId = params.get('chat');
+    const toUid = params.get('to');
+
+    authOnLoad(async (u)=>{
+      if(!u) return redirect('index.html');
+      if(!chatId) return redirect('messages.html');
+      const other = await getDb(`/users/${toUid}`) || {name:'Unknown'};
+      document.getElementById('chatTitle').textContent = other.name;
+
+      onChildAdded(`/messages/${chatId}`, (key, m)=> appendMsg(m));
+
+      document.getElementById('sendBtn').onclick = sendMsg;
+      document.getElementById('msgInput').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); sendMsg(); } });
+      document.getElementById('fileInput').addEventListener('change', async (e)=>{
+        const f = e.target.files[0]; if(!f) return;
+        const url = await uploadImage(`chats/${chatId}/${Date.now()}_${f.name}`, f);
+        await pushDb(`/messages/${chatId}`, { from:u.uid, text:null, image:url, t:Date.now() });
+        e.target.value = '';
+      });
+    });
+
+    function appendMsg(m){
+      const me = uidOrNull();
+      const row = document.createElement('div'); row.className = 'msg ' + (m.from===me ? 'mine':'theirs');
+      if(m.image){ const im=document.createElement('img'); im.src=m.image; row.appendChild(im); }
+      if(m.text){ const t=document.createElement('div'); t.textContent=m.text; row.appendChild(t); }
+      const time = document.createElement('div'); time.className='meta-time'; time.textContent=timeAgo(m.t);
+      row.appendChild(time);
+      const list=document.getElementById('msgList'); list.appendChild(row); list.scrollTop=list.scrollHeight;
+    }
+
+    async function sendMsg(){
+      const val = document.getElementById('msgInput').value.trim();
+      if(!val) return;
+      const me = uidOrNull();
+      await pushDb(`/messages/${chatId}`, { from:me, text:val, image:null, t:Date.now() });
+      document.getElementById('msgInput').value='';
+    }
+  </script>
+</body>
+</html>

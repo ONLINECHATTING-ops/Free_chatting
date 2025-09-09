@@ -1,0 +1,57 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lite — Messages</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap container">
+      <a class="link" href="home.html">← Home</a>
+      <strong class="brand">Messages</strong>
+      <a class="link" href="friends.html">Friends →</a>
+    </div>
+  </div>
+
+  <div class="container card">
+    <ul id="chatList" class="list chats"></ul>
+  </div>
+
+  <div class="navbar">
+    <div class="wrap container">
+      <a href="home.html">🏠 Home</a>
+      <a href="friends.html">👥 Friends</a>
+      <a class="active" href="messages.html">💬 Messages</a>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+<script src="app.js"></script><script>
+    authOnLoad(async (u)=>{
+      if(!u) return redirect('index.html');
+      onValue(`/users/${u.uid}/chats`, async (val)=>{
+        const ul = document.getElementById('chatList'); ul.innerHTML='';
+        for(const chatId in (val||{})){ 
+          const meta = await getDb(`/chats/${chatId}`) || {participants:{}};
+          const otherUid = Object.keys(meta.participants || {}).find(x=> x!==u.uid);
+          const other = otherUid ? (await getDb(`/users/${otherUid}`)) : {name:'Unknown'};
+          const msgs = await getDb(`/messages/${chatId}`) || {};
+          let last = null; Object.values(msgs).forEach(m=>{ if(!last || m.t>last.t) last=m; });
+          const preview = last ? (last.text ? last.text.slice(0,40) : (last.image?'📷 Image':'')) : 'Start chatting';
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="row"><img class="avatar-sm" src="${other.avatar || 'https://via.placeholder.com/36?text=U'}"/><div><div><strong>${other.name}</strong></div><div class="muted">${preview}</div></div></span>
+                          <span><a class="primary" href="chat.html?chat=${chatId}&to=${otherUid}">Open</a></span>`;
+          ul.appendChild(li);
+        }
+        if(!val) ul.innerHTML = '<li class="muted">No conversations</li>';
+      });
+    });
+  </script>
+</body>
+</html>

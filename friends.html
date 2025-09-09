@@ -1,0 +1,112 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lite — Friends</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap container">
+      <a class="link" href="home.html">← Home</a>
+      <strong class="brand">Friends</strong>
+      <a class="link" href="messages.html">Messages →</a>
+    </div>
+  </div>
+
+  <div class="container grid">
+    <div class="card">
+      <div class="row">
+        <input id="searchUser" placeholder="Find by username" />
+        <button id="sendReq" class="primary">Add</button>
+      </div>
+      <div id="status" class="muted"></div>
+    </div>
+
+    <div class="card">
+      <h4>Requests</h4>
+      <ul id="requests" class="list friends"></ul>
+    </div>
+
+    <div class="card">
+      <h4>Your Friends</h4>
+      <ul id="friends" class="list friends"></ul>
+    </div>
+  </div>
+
+  <div class="navbar">
+    <div class="wrap container">
+      <a href="home.html">🏠 Home</a>
+      <a class="active" href="friends.html">👥 Friends</a>
+      <a href="messages.html">💬 Messages</a>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+<script src="app.js"></script><script>
+    authOnLoad(async (u)=>{
+      if(!u) return redirect('index.html');
+      document.getElementById('sendReq').onclick = async ()=>{
+        const uname = document.getElementById('searchUser').value.trim();
+        const st = document.getElementById('status');
+        if(!uname){ st.textContent='Enter username'; return; }
+        const uid = await getDb(`/usernames/${uname}`);
+        if(!uid){ st.textContent='User not found'; return; }
+        if(uid===u.uid){ st.textContent='That\'s you!'; return; }
+        const me = await getDb(`/users/${u.uid}`) || {name:'User'};
+        await setDb(`/friendRequests/${uid}/${u.uid}`, { from:u.uid, fromName: me.name, at:Date.now() });
+        st.textContent='Request sent';
+      };
+
+      onValue(`/friendRequests/${u.uid}`, async (val)=>{
+        const ul = document.getElementById('requests'); ul.innerHTML='';
+        for(const from in (val||{})){ 
+          const r = val[from];
+          const li = document.createElement('li');
+          li.innerHTML = `<span><strong>${r.fromName}</strong></span>
+                          <span>
+                            <button class="primary" data-uid="${from}" onclick="acceptReq('${from}')">Accept</button>
+                            <button class="secondary" data-uid="${from}" onclick="rejectReq('${from}')">Reject</button>
+                          </span>`;
+          ul.appendChild(li);
+        }
+        if(!val) ul.innerHTML = '<li class="muted">No requests</li>';
+      });
+
+      onValue(`/users/${u.uid}/friends`, async (val)=>{
+        const ul = document.getElementById('friends'); ul.innerHTML='';
+        for(const k in (val||{})){ 
+          const f = val[k];
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="row"><img class="avatar-sm" src="${f.avatar || 'https://via.placeholder.com/36?text=U'}"/><strong>${f.name}</strong></span>
+                          <span><a class="primary" href="chat.html?chat=${createChatId(u.uid,k)}&to=${k}">Message</a></span>`;
+          ul.appendChild(li);
+        }
+        if(!val) ul.innerHTML = '<li class="muted">No friends yet</li>';
+      });
+    });
+
+    async function acceptReq(fromUid){
+      const u = firebase.auth().currentUser;
+      const me = await getDb(`/users/${u.uid}`);
+      const other = await getDb(`/users/${fromUid}`);
+      await setDb(`/users/${u.uid}/friends/${fromUid}`, { uid:fromUid, name:other.name, avatar:other.avatar||'' });
+      await setDb(`/users/${fromUid}/friends/${u.uid}`, { uid:u.uid, name:me.name, avatar:me.avatar||'' });
+      await removeDb(`/friendRequests/${u.uid}/${fromUid}`);
+      const chatId = createChatId(u.uid, fromUid);
+      await setDb(`/chats/${chatId}`, { participants: { [u.uid]:true, [fromUid]:true }, createdAt:Date.now() });
+      await setDb(`/users/${u.uid}/chats/${chatId}`, true);
+      await setDb(`/users/${fromUid}/chats/${chatId}`, true);
+    }
+    async function rejectReq(fromUid){ 
+      const u = firebase.auth().currentUser;
+      await removeDb(`/friendRequests/${u.uid}/${fromUid}`); 
+    }
+  </script>
+</body>
+</html>

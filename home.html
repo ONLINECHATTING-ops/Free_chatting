@@ -1,0 +1,129 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lite — Home</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap container">
+      <div class="row">
+        <img id="meAvatarSm" class="avatar-sm" src="" alt="" />
+        <strong class="brand">Lite</strong>
+      </div>
+      <div class="row">
+        <button id="toProfile" class="secondary">Profile</button>
+        <button id="logout" class="link">Logout</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container grid">
+    <div class="card">
+      <div class="row">
+        <img id="meAvatar" class="avatar-md" src="" alt="" />
+        <input id="postText" placeholder="What's on your mind?" style="flex:1" />
+      </div>
+      <div class="action-row">
+        <div class="row">
+          <input id="postImage" type="file" accept="image/*" capture="environment" />
+        </div>
+        <button id="postBtn" class="primary">Post</button>
+      </div>
+      <div id="postMsg" class="muted"></div>
+    </div>
+
+    <div id="feed" class="feed"></div>
+  </div>
+
+  <div class="navbar">
+    <div class="wrap container">
+      <a class="active" href="home.html">🏠 Home</a>
+      <a href="friends.html">👥 Friends</a>
+      <a href="messages.html">💬 Messages</a>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
+<script src="app.js"></script><script>
+    authOnLoad(async (u)=>{
+      if(!u) return redirect('index.html');
+      const me = await getDb(`/users/${u.uid}`) || {};
+      document.getElementById('meAvatar').src = me.avatar || 'https://via.placeholder.com/48?text=U';
+      document.getElementById('meAvatarSm').src = me.avatar || 'https://via.placeholder.com/36?text=U';
+      document.getElementById('toProfile').onclick = ()=> redirect('profile.html');
+
+      document.getElementById('logout').onclick = async ()=>{ await signOutApp(); redirect('index.html'); };
+
+      // Create post
+      document.getElementById('postBtn').onclick = async ()=>{
+        const text = document.getElementById('postText').value.trim();
+        const file = document.getElementById('postImage').files[0];
+        const msg = document.getElementById('postMsg');
+        if(!text && !file) { msg.textContent='Write something or add an image'; return; }
+        msg.textContent='Posting...';
+        let imgUrl = '';
+        if(file) imgUrl = await uploadImage(`posts/${u.uid}/${Date.now()}_${file.name}`, file);
+        const key = await pushDb('/posts', { uid:u.uid, text, image:imgUrl, at:Date.now(), likes:0 }).key;
+        await setDb(`/userPosts/${u.uid}/${key}`, true);
+        document.getElementById('postText').value=''; document.getElementById('postImage').value='';
+        msg.textContent='Posted';
+      };
+
+      // Render feed (latest first)
+      onValue('/posts', (val)=>{
+        const feed = document.getElementById('feed'); feed.innerHTML='';
+        if(!val) return;
+        const entries = Object.entries(val).sort((a,b)=> b[1].at - a[1].at);
+        entries.forEach(async ([id,p])=>{
+          const user = await getDb(`/users/${p.uid}`) || {name:'User', avatar:''};
+          const card = document.createElement('div'); card.className='card post';
+          card.innerHTML = `
+            <div class="meta">
+              <img class="avatar-sm" src="${user.avatar || 'https://via.placeholder.com/36?text=U'}" />
+              <div><strong>${user.name || 'User'}</strong><div class="muted">${new Date(p.at).toLocaleString()}</div></div>
+            </div>
+            <div>${p.text ? p.text.replace(/</g,'&lt;') : ''}</div>
+            ${p.image ? `<img class="img" src="${p.image}" />` : ''}
+            <div class="row" style="gap:12px;">
+              <button class="secondary likeBtn" data-id="${id}">❤️ ${p.likes || 0}</button>
+              <span class="muted">Comments</span>
+            </div>
+            <div id="comments-${id}"></div>
+            <div class="comment">
+              <input id="cmt-${id}" placeholder="Write a comment..." />
+              <button class="primary cmtBtn" data-id="${id}">Comment</button>
+            </div>
+          `;
+          feed.appendChild(card);
+          card.querySelector('.likeBtn').onclick = async (e)=>{
+            const pid = e.target.getAttribute('data-id');
+            const curr = (await getDb(`/posts/${pid}/likes`)) || 0;
+            await setDb(`/posts/${pid}/likes`, curr + 1);
+          };
+          card.querySelector('.cmtBtn').onclick = async (e)=>{
+            const pid = e.target.getAttribute('data-id');
+            const input = document.getElementById('cmt-'+pid);
+            const text = input.value.trim(); if(!text) return;
+            await pushDb(`/comments/${pid}`, { uid:u.uid, text, at:Date.now() });
+            input.value='';
+          };
+          onChildAdded(`/comments/${id}`, async (key, c)=>{
+            const userC = await getDb(`/users/${c.uid}`) || {name:'User'};
+            const wrap = document.getElementById('comments-'+id);
+            const row = document.createElement('div'); row.className='row';
+            row.innerHTML = `<img class="avatar-sm" src="${userC.avatar || 'https://via.placeholder.com/36?text=U'}" /><div><div><strong>${userC.name}</strong></div><div>${c.text.replace(/</g,'&lt;')}</div><div class="muted">${timeAgo(c.at)}</div></div>`;
+            wrap.appendChild(row);
+          });
+        });
+      });
+    });
+  </script>
+</body>
+</html>
